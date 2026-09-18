@@ -1,4 +1,6 @@
 #include "../headers/todolistapp.h"
+#include <QVBoxLayout>
+#include <QListWidgetItem>
 #include <QFile>
 #include <QTextStream>
 #include <QMessageBox>
@@ -28,7 +30,9 @@ ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
     layout->addWidget(addImageButton);
     layout->addWidget(imageLabel);
 
-    centralWidget()->setLayout(layout);
+    QWidget *central = new QWidget(this);
+    central->setLayout(layout);
+    setCentralWidget(central);
 
     connect(addButton, &QPushButton::clicked, this, &ToDoListApp::addTask);
     connect(taskList, &QListWidget::itemDoubleClicked, this, &ToDoListApp::toggleTaskComplete);

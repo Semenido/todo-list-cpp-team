@@ -56,10 +56,10 @@ qrc_*.cpp
 ui_*.h
 *.qmlc
 *.jsc
-Makefile*
 *build-*
 *.qm
 *.prl
+Makefile.qmake
 
 # Qt unit tests
 target_wrapper.*
@@ -113,6 +113,8 @@ compile_commands.json
 *.cxxflags
 *.cflags
 
+# binaries
+todo-list
 
 ### VisualStudioCode ###
 .vscode/*
