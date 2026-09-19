@@ -16,6 +16,7 @@ public:
 private slots:
     void addTask();
     void toggleTaskComplete(QListWidgetItem *item);
+    void onItemChanged(QListWidgetItem *item);
     void saveTasks();
     void loadTasks();
     void addImageToTask();
@@ -24,6 +25,7 @@ private:
     void updateTaskList();
     void cacheTasksToFile();
     void cacheTasksFromCacheFile();
+    Task* findTaskById(int id);
 
     QLineEdit *taskInput;
     QPushButton *addButton;
@@ -34,6 +36,7 @@ private:
     QLabel *imageLabel;
     QVector<Task> tasks;
     QString cacheFilePath;
+    bool updatingList = false;
 };
 
 #endif // TODOLISTAPP_H
