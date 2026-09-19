@@ -17,12 +17,14 @@ private slots:
     void addTask();
     void toggleTaskComplete(QListWidgetItem *item);
     void onItemChanged(QListWidgetItem *item);
+    void onSelectionChanged();
     void saveTasks();
     void loadTasks();
     void addImageToTask();
 
 private:
     void updateTaskList();
+    void updateImagePreview(const Task &task);
     void cacheTasksToFile();
     void cacheTasksFromCacheFile();
     Task* findTaskById(int id);
