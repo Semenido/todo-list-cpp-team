@@ -1,6 +1,5 @@
 #include "../headers/todolistapp.h"
 #include <QVBoxLayout>
-#include <QListWidgetItem>
 #include <QFile>
 #include <QTextStream>
 #include <QMessageBox>
@@ -8,6 +7,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QListWidgetItem>
+#include <QStandardPaths>
+#include <QDir>
 
 ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
     setWindowTitle("To-Do List App");
@@ -39,11 +41,18 @@ ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
     connect(saveButton, &QPushButton::clicked, this, &ToDoListApp::saveTasks);
     connect(loadButton, &QPushButton::clicked, this, &ToDoListApp::loadTasks);
     connect(addImageButton, &QPushButton::clicked, this, &ToDoListApp::addImageToTask);
+    connect(taskList, &QListWidget::itemChanged,
+        this, &ToDoListApp::onItemChanged);
+    
+    QString docsDir = QStandardPaths::writableLocation(
+                        QStandardPaths::DocumentsLocation);
+    if (docsDir.isEmpty())
+        docsDir = QDir::homePath();
 
-    // Define the path for the cache file
-    cacheFilePath = "cached_tasks.json";
+    const QString cacheDir = docsDir + "/.todo-list";
+    QDir().mkpath(cacheDir);
+    cacheFilePath = cacheDir + "/cached_tasks.json";
 
-    // Load cached tasks on application startup
     cacheTasksFromCacheFile();
 }
 
@@ -58,11 +67,21 @@ void ToDoListApp::addTask() {
     }
 }
 
+Task* ToDoListApp::findTaskById(int id) {
+    for (Task &t : tasks)
+        if (t.getId() == id)
+            return &t;
+    return nullptr;
+}
+
 void ToDoListApp::toggleTaskComplete(QListWidgetItem *item) {
-    int index = taskList->row(item);
-    tasks[index].toggleComplete();
-    updateTaskList();
-    cacheTasksToFile();
+    if (!item) return;
+    const int id = item->data(Qt::UserRole).toInt();
+    if (Task *t = findTaskById(id)) {
+        t->toggleComplete();
+        updateTaskList();
+        cacheTasksToFile();
+    }
 }
 
 void ToDoListApp::saveTasks() {
@@ -105,28 +124,32 @@ void ToDoListApp::loadTasks() {
 }
 
 void ToDoListApp::addImageToTask() {
-    QString imagePath = QFileDialog::getOpenFileName(this, "Select Image", "", "Images (*.png *.jpg *.jpeg)");
-    if (!imagePath.isEmpty()) {
-        int currentIndex = taskList->currentIndex().row();
-        if (currentIndex >= 0 && currentIndex < tasks.size()) {
-            tasks[currentIndex].setImagePath(imagePath);
-            QPixmap image(imagePath);
-            imageLabel->setPixmap(image.scaledToHeight(100));
-            cacheTasksToFile();
-        }
-    }
+    QListWidgetItem *item = taskList->currentItem();
+    if (!item) return;
+
+    const int id = item->data(Qt::UserRole).toInt();
+    Task *t = findTaskById(id);
+    if (!t) return;
+
+    const QString imagePath = QFileDialog::getOpenFileName(
+        this, "Select Image", "", "Images (*.png *.jpg *.jpeg)");
+    if (imagePath.isEmpty()) return;
+
+    t->setImagePath(imagePath);
+    cacheTasksToFile();
 }
 
 void ToDoListApp::updateTaskList() {
+    updatingList = true;
     taskList->clear();
     for (const Task &task : tasks) {
-        QListWidgetItem *item = new QListWidgetItem(task.getDescription());
-        if (task.isCompleted()) {
-            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-            item->setCheckState(Qt::Checked);
-        }
+        auto *item = new QListWidgetItem(task.getDescription());
+        item->setData(Qt::UserRole, task.getId());
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(task.isCompleted() ? Qt::Checked : Qt::Unchecked);
         taskList->addItem(item);
     }
+    updatingList = false;
 }
 
 void ToDoListApp::cacheTasksToFile() {
@@ -170,5 +193,20 @@ void ToDoListApp::cacheTasksFromCacheFile() {
             updateTaskList();
         }
         cacheFile.close();
+    }
+}
+
+void ToDoListApp::onItemChanged(QListWidgetItem *item) {
+    if (updatingList) return;
+    if (!item) return;
+
+    const int id = item->data(Qt::UserRole).toInt();
+    Task *t = findTaskById(id);
+    if (!t) return;
+
+    const bool checked = (item->checkState() == Qt::Checked);
+    if (t->isCompleted() != checked) {
+        t->toggleComplete();
+        cacheTasksToFile();
     }
 }

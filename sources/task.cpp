@@ -1,6 +1,9 @@
 #include "../headers/task.h"
 
-Task::Task(const QString &description, bool completed) : description(description), completed(completed) {}
+int Task::nextId = 0;
+
+Task::Task(const QString &description, bool completed)
+    : id(nextId++), description(description), completed(completed) {}
 
 QString Task::getDescription() const {
     return description;

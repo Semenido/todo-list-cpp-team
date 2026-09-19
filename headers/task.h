@@ -7,6 +7,8 @@
 class Task {
 public:
     Task(const QString &description, bool completed = false);
+
+    int getId() const { return id; }
     QString getDescription() const;
     bool isCompleted() const;
     void toggleComplete();
@@ -15,6 +17,8 @@ public:
     QPixmap getImage() const;
 
 private:
+    static int nextId;
+    int id;
     QString description;
     bool completed;
     QString imagePath;
