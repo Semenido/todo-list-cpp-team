@@ -42,8 +42,14 @@ ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
     connect(loadButton, &QPushButton::clicked, this, &ToDoListApp::loadTasks);
     connect(addImageButton, &QPushButton::clicked, this, &ToDoListApp::addImageToTask);
     connect(taskList, &QListWidget::itemChanged,
-        this, &ToDoListApp::onItemChanged);
-    
+            this, &ToDoListApp::onItemChanged);
+    connect(taskList, &QListWidget::itemSelectionChanged,
+            this, &ToDoListApp::onSelectionChanged);
+
+    imageLabel->setText("(no task selected)");
+    imageLabel->setAlignment(Qt::AlignCenter);
+    imageLabel->setMinimumHeight(100);
+
     QString docsDir = QStandardPaths::writableLocation(
                         QStandardPaths::DocumentsLocation);
     if (docsDir.isEmpty())
@@ -72,6 +78,34 @@ Task* ToDoListApp::findTaskById(int id) {
         if (t.getId() == id)
             return &t;
     return nullptr;
+}
+
+void ToDoListApp::onSelectionChanged() {
+    QListWidgetItem *item = taskList->currentItem();
+    if (!item) {
+        imageLabel->clear();
+        imageLabel->setText("(no task selected)");
+        return;
+    }
+    const int id = item->data(Qt::UserRole).toInt();
+    if (Task *t = findTaskById(id))
+        updateImagePreview(*t);
+}
+
+void ToDoListApp::updateImagePreview(const Task &task) {
+    const QString path = task.getImagePath();
+    if (path.isEmpty()) {
+        imageLabel->clear();
+        imageLabel->setText("(no image)");
+        return;
+    }
+    QPixmap pix(path);
+    if (pix.isNull()) {
+        imageLabel->clear();
+        imageLabel->setText("(image not found)");
+        return;
+    }
+    imageLabel->setPixmap(pix.scaledToHeight(100, Qt::SmoothTransformation));
 }
 
 void ToDoListApp::toggleTaskComplete(QListWidgetItem *item) {
@@ -125,7 +159,11 @@ void ToDoListApp::loadTasks() {
 
 void ToDoListApp::addImageToTask() {
     QListWidgetItem *item = taskList->currentItem();
-    if (!item) return;
+    if (!item) {
+        QMessageBox::information(this, "Add Image",
+                                 "Сначала выберите задачу в списке.");
+        return;
+    }
 
     const int id = item->data(Qt::UserRole).toInt();
     Task *t = findTaskById(id);
@@ -136,6 +174,7 @@ void ToDoListApp::addImageToTask() {
     if (imagePath.isEmpty()) return;
 
     t->setImagePath(imagePath);
+    updateImagePreview(*t);
     cacheTasksToFile();
 }
 
@@ -150,6 +189,13 @@ void ToDoListApp::updateTaskList() {
         taskList->addItem(item);
     }
     updatingList = false;
+
+    if (taskList->currentItem())
+        onSelectionChanged();
+    else {
+        imageLabel->clear();
+        imageLabel->setText("(no task selected)");
+    }
 }
 
 void ToDoListApp::cacheTasksToFile() {
