@@ -6,6 +6,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QLabel>
+#include <QPoint>
 #include "task.h"
 
 class ToDoListApp : public QMainWindow {
