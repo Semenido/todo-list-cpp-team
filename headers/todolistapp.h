@@ -7,6 +7,7 @@
 #include <QListWidget>
 #include <QLabel>
 #include <QPoint>
+#include <QTimer>
 #include "task.h"
 
 class ToDoListApp : public QMainWindow {
@@ -24,6 +25,8 @@ private slots:
     void saveTasks();
     void loadTasks();
     void addImageToTask();
+    void onSearchTextChanged(const QString &text);
+    void applySearch();
 
 private:
     enum class SortMode {
@@ -55,9 +58,14 @@ private:
 
     void setTaskCompleted(Task &task, bool value);
 
+    bool taskMatchesSearch(const Task &task, const QString &query,
+                           bool &matchedByName) const;
+
     QLineEdit *taskInput;
     QPushButton *addButton;
+    QLineEdit *searchInput;
     QListWidget *taskList;
+    QLabel *noResultsLabel;
     QPushButton *saveButton;
     QPushButton *loadButton;
     QPushButton *addImageButton;
@@ -67,6 +75,9 @@ private:
     QString settingsFilePath;
     bool updatingList = false;
     SortMode sortMode = SortMode::None;
+
+    QTimer *searchDebounceTimer;
+    QString searchQuery;
 };
 
 #endif // TODOLISTAPP_H

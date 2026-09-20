@@ -17,6 +17,7 @@
 #include <QFileInfo>
 #include <QFont>
 #include <QDateTime>
+#include <QTimer>
 #include <algorithm>
 
 static const char *kSettingsFileName = "settings.json";
@@ -30,8 +31,19 @@ ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
     QVBoxLayout *layout = new QVBoxLayout;
 
     taskInput = new QLineEdit;
+    taskInput->setPlaceholderText("Введите название задачи...");
     addButton = new QPushButton("Add Task");
+
+    searchInput = new QLineEdit;
+    searchInput->setPlaceholderText("Поиск...");
+    searchInput->setClearButtonEnabled(true);
+
     taskList = new QListWidget;
+    noResultsLabel = new QLabel("Ничего не найдено...");
+    noResultsLabel->setAlignment(Qt::AlignCenter);
+    noResultsLabel->setStyleSheet("color: #888; font-style: italic; padding: 12px;");
+    noResultsLabel->hide();
+
     saveButton = new QPushButton("Save Tasks");
     loadButton = new QPushButton("Load Tasks");
     addImageButton = new QPushButton("Add Image");
@@ -39,7 +51,9 @@ ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
 
     layout->addWidget(taskInput);
     layout->addWidget(addButton);
+    layout->addWidget(searchInput);
     layout->addWidget(taskList);
+    layout->addWidget(noResultsLabel);
     layout->addWidget(saveButton);
     layout->addWidget(loadButton);
     layout->addWidget(addImageButton);
@@ -64,6 +78,14 @@ ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
     taskList->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(taskList, &QListWidget::customContextMenuRequested,
             this, &ToDoListApp::onContextMenuRequested);
+
+    searchDebounceTimer = new QTimer(this);
+    searchDebounceTimer->setSingleShot(true);
+    searchDebounceTimer->setInterval(150);
+    connect(searchDebounceTimer, &QTimer::timeout,
+            this, &ToDoListApp::applySearch);
+    connect(searchInput, &QLineEdit::textChanged,
+            this, &ToDoListApp::onSearchTextChanged);
 
     QString docsDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
     if (docsDir.isEmpty())
@@ -107,6 +129,20 @@ Task* ToDoListApp::findTaskById(int id) {
         if (t.getId() == id)
             return &t;
     return nullptr;
+}
+
+bool ToDoListApp::taskMatchesSearch(const Task &task,
+                                    const QString &query,
+                                    bool &matchedByName) const {
+    matchedByName = false;
+    if (query.isEmpty())
+        return true;
+
+    if (task.getDescription().contains(query, Qt::CaseInsensitive)) {
+        matchedByName = true;
+        return true;
+    }
+    return task.getComment().contains(query, Qt::CaseInsensitive);
 }
 
 void ToDoListApp::toggleTaskComplete(QListWidgetItem *item) {
@@ -189,7 +225,29 @@ void ToDoListApp::updateTaskList() {
         break;
     }
 
-    for (const Task &task : ordered) {
+    QVector<Task> nameMatches;
+    QVector<Task> commentOnlyMatches;
+
+    const QString query = searchQuery;
+    if (query.isEmpty()) {
+        nameMatches = ordered;
+    } else {
+        for (const Task &task : ordered) {
+            bool byName = false;
+            if (taskMatchesSearch(task, query, byName)) {
+                if (byName)
+                    nameMatches.append(task);
+                else
+                    commentOnlyMatches.append(task);
+            }
+        }
+    }
+
+    const QVector<Task> visible = nameMatches.isEmpty()
+                                      ? commentOnlyMatches
+                                      : nameMatches;
+
+    for (const Task &task : visible) {
         auto *item = new QListWidgetItem(task.getDescription());
         item->setData(Qt::UserRole, task.getId());
 
@@ -198,7 +256,7 @@ void ToDoListApp::updateTaskList() {
             tooltip = tooltip.isEmpty()
                           ? QString()
                           : tooltip + "\n";
-            tooltip += "Completed: "
+            tooltip += "Выполнено: "
                        + task.getCompletedAt().toString("dd.MM.yyyy HH:mm");
         }
         if (!tooltip.isEmpty())
@@ -221,7 +279,7 @@ void ToDoListApp::updateTaskList() {
 
         if (task.isCompleted() && task.getCompletedAt().isValid()) {
             badgeText += QString(" &nbsp; <span style='color:#616161;'>✓ %1</span>")
-                             .arg(task.getCompletedAt().toString("dd.MM.yyyy HH:mm"));
+                            .arg(task.getCompletedAt().toString("dd.MM.yyyy HH:mm"));
         }
 
         auto *badge = new QLabel(badgeText);
@@ -230,6 +288,10 @@ void ToDoListApp::updateTaskList() {
         badge->setContentsMargins(0, 0, 6, 0);
         taskList->setItemWidget(item, badge);
     }
+
+    const bool nothingFound = !query.isEmpty() && visible.isEmpty();
+    noResultsLabel->setVisible(nothingFound);
+    taskList->setVisible(!nothingFound);
 
     updatingList = false;
 
@@ -319,6 +381,16 @@ void ToDoListApp::onContextMenuRequested(const QPoint &pos) {
         saveSettings();
         updateTaskList();
     }
+}
+
+void ToDoListApp::onSearchTextChanged(const QString &text) {
+    Q_UNUSED(text);
+    searchDebounceTimer->start();
+}
+
+void ToDoListApp::applySearch() {
+    searchQuery = searchInput->text().trimmed();
+    updateTaskList();
 }
 
 // settings
