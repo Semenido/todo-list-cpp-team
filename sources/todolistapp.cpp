@@ -14,6 +14,9 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QFileInfo>
+#include <QColor>
+#include <QFont>
+#include <algorithm>
 
 ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
     setWindowTitle("To-Do List App");
@@ -127,12 +130,38 @@ void ToDoListApp::onSelectionChanged() {
 void ToDoListApp::updateTaskList() {
     updatingList = true;
     taskList->clear();
-    for (const Task &task : tasks) {
+
+    QVector<Task> ordered = tasks;
+    if (sortByPriority) {
+        std::stable_sort(ordered.begin(), ordered.end(),
+                         [](const Task &a, const Task &b) {
+                             return static_cast<int>(a.getPriority())
+                                  > static_cast<int>(b.getPriority());
+                         });
+    }
+
+    for (const Task &task : ordered) {
         auto *item = new QListWidgetItem(task.getDescription());
         item->setData(Qt::UserRole, task.getId());
 
         if (!task.getComment().isEmpty())
             item->setToolTip(task.getComment());
+
+        switch (task.getPriority()) {
+        case Task::Priority::Low:
+            item->setBackground(QColor(235, 235, 235));
+            break;
+        case Task::Priority::High: {
+            item->setBackground(QColor(255, 220, 220));
+            QFont f = item->font();
+            f.setBold(true);
+            item->setFont(f);
+            break;
+        }
+        case Task::Priority::Medium:
+        default:
+            break;
+        }
 
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(task.isCompleted() ? Qt::Checked : Qt::Unchecked);
@@ -187,17 +216,37 @@ void ToDoListApp::addImageToTask() {
 
 void ToDoListApp::onContextMenuRequested(const QPoint &pos) {
     QListWidgetItem *item = taskList->itemAt(pos);
-    if (!item)
-        return;
-
-    taskList->setCurrentItem(item);
 
     QMenu menu(this);
-    QAction *editAction = menu.addAction("Редактировать");
-    QAction *chosen = menu.exec(taskList->viewport()->mapToGlobal(pos));
+    QAction *editAction = nullptr;
 
-    if (chosen == editAction)
+    if (item) {
+        taskList->setCurrentItem(item);
+        editAction = menu.addAction("Редактировать");
+        menu.addSeparator();
+    }
+
+    QAction *sortByPriorityAction = menu.addAction("Сортировать по приоритету");
+    sortByPriorityAction->setCheckable(true);
+    sortByPriorityAction->setChecked(sortByPriority);
+
+    QAction *noSortAction = menu.addAction("Без сортировки");
+    noSortAction->setCheckable(true);
+    noSortAction->setChecked(!sortByPriority);
+
+    QAction *chosen = menu.exec(taskList->viewport()->mapToGlobal(pos));
+    if (!chosen)
+        return;
+
+    if (chosen == editAction) {
         editTask();
+    } else if (chosen == sortByPriorityAction) {
+        sortByPriority = true;
+        updateTaskList();
+    } else if (chosen == noSortAction) {
+        sortByPriority = false;
+        updateTaskList();
+    }
 }
 
 void ToDoListApp::editTask() {
@@ -216,18 +265,23 @@ void ToDoListApp::editTask() {
     EditTaskDialog dialog(this);
     dialog.setDescription(t->getDescription());
     dialog.setComment(t->getComment());
+    dialog.setPriority(t->getPriority());
 
     if (dialog.exec() != QDialog::Accepted)
         return;
 
     const QString newDescription = dialog.description();
     const QString newComment = dialog.comment();
+    const Task::Priority newPriority = dialog.priority();
 
-    if (newDescription == t->getDescription() && newComment == t->getComment())
+    if (newDescription == t->getDescription()
+        && newComment == t->getComment()
+        && newPriority == t->getPriority())
         return;
 
     t->setDescription(newDescription);
     t->setComment(newComment);
+    t->setPriority(newPriority);
 
     updateTaskList();
     cacheTasksToFile();

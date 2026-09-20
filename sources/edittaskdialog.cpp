@@ -6,7 +6,7 @@
 EditTaskDialog::EditTaskDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle("Edit Task");
     setModal(true);
-    resize(480, 320);
+    resize(480, 360);
 
     auto *layout = new QVBoxLayout(this);
 
@@ -21,6 +21,15 @@ EditTaskDialog::EditTaskDialog(QWidget *parent) : QDialog(parent) {
     commentEdit->setPlaceholderText("Optional comment...");
     layout->addWidget(commentLabel);
     layout->addWidget(commentEdit, 1);
+
+    priorityLabel = new QLabel("Priority", this);
+    priorityCombo = new QComboBox(this);
+    priorityCombo->addItem("Low",    QVariant::fromValue(static_cast<int>(Task::Priority::Low)));
+    priorityCombo->addItem("Medium", QVariant::fromValue(static_cast<int>(Task::Priority::Medium)));
+    priorityCombo->addItem("High",   QVariant::fromValue(static_cast<int>(Task::Priority::High)));
+    priorityCombo->setCurrentIndex(1);   // Medium по умолчанию
+    layout->addWidget(priorityLabel);
+    layout->addWidget(priorityCombo);
 
     auto *buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -44,6 +53,17 @@ void EditTaskDialog::setComment(const QString &value) {
 
 QString EditTaskDialog::comment() const {
     return commentEdit->toPlainText();
+}
+
+void EditTaskDialog::setPriority(Task::Priority value) {
+    const int idx = priorityCombo->findData(static_cast<int>(value));
+    if (idx >= 0)
+        priorityCombo->setCurrentIndex(idx);
+}
+
+Task::Priority EditTaskDialog::priority() const {
+    return static_cast<Task::Priority>(
+        priorityCombo->currentData().toInt());
 }
 
 void EditTaskDialog::onAccept() {

@@ -50,6 +50,7 @@ private:
     QString cacheFilePath;
     QString pathsDir;
     bool updatingList = false;
+    bool sortByPriority = false;
 };
 
 #endif // TODOLISTAPP_H
