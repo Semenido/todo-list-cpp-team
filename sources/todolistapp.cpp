@@ -272,14 +272,17 @@ void ToDoListApp::updateTaskList() {
         item->setCheckState(task.isCompleted() ? Qt::Checked : Qt::Unchecked);
         taskList->addItem(item);
 
-        QString badgeText =
-            QString("<span style='color:%1; font-weight:bold;'>●</span> %2")
-                .arg(priorityBadgeColor(task.getPriority()),
-                     priorityLabel(task.getPriority()));
+        QString badgeText;
 
         if (task.isCompleted() && task.getCompletedAt().isValid()) {
-            badgeText += QString(" &nbsp; <span style='color:#616161;'>✓ %1</span>")
-                            .arg(task.getCompletedAt().toString("dd.MM.yyyy HH:mm"));
+            badgeText = QString("<span style='color:#53e06b;'>%1</span>"
+                                " &nbsp; "
+                                "<span style='color:%2; font-weight:bold;'>●</span>")
+                            .arg(task.getCompletedAt().toString("dd.MM.yyyy HH:mm"),
+                                priorityBadgeColor(task.getPriority()));
+        } else {
+            badgeText = QString("<span style='color:%1; font-weight:bold;'>●</span>")
+                            .arg(priorityBadgeColor(task.getPriority()));
         }
 
         auto *badge = new QLabel(badgeText);
