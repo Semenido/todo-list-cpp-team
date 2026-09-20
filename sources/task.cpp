@@ -33,8 +33,20 @@ bool Task::isCompleted() const {
     return completed;
 }
 
+void Task::setCompleted(bool value) {
+    completed = value;
+}
+
 void Task::toggleComplete() {
     completed = !completed;
+}
+
+QDateTime Task::getCompletedAt() const {
+    return completedAt;
+}
+
+void Task::setCompletedAt(const QDateTime &value) {
+    completedAt = value;
 }
 
 void Task::setImagePath(const QString &path) {
