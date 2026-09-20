@@ -6,6 +6,12 @@
 
 class Task {
 public:
+    enum class Priority {
+        Low = 0,
+        Medium = 1,
+        High = 2
+    };
+
     Task(const QString &description, bool completed = false);
 
     int getId() const { return id; }
@@ -16,6 +22,9 @@ public:
     QString getComment() const;
     void setComment(const QString &value);
 
+    Priority getPriority() const;
+    void setPriority(Priority value);
+
     bool isCompleted() const;
     void toggleComplete();
 
@@ -23,11 +32,15 @@ public:
     QString getImagePath() const;
     QPixmap getImage() const;
 
+    static QString priorityToString(Priority value);
+    static Priority priorityFromString(const QString &value);
+
 private:
     static int nextId;
     int id;
     QString description;
     QString comment;
+    Priority priority = Priority::Medium;
     bool completed;
     QString imagePath;
 };

@@ -26,6 +26,12 @@ private slots:
     void addImageToTask();
 
 private:
+    enum class SortMode {
+        None,
+        ByPriority,
+        ByName
+    };
+
     void updateTaskList();
     void updateImagePreview(const Task &task);
     void cacheTasksToFile();
@@ -39,6 +45,14 @@ private:
     QString readLastPath(const QString &filePath, const QString &fallback) const;
     void writeLastPath(const QString &filePath, const QString &value) const;
 
+    void loadSettings();
+    void saveSettings() const;
+    static QString sortModeToString(SortMode mode);
+    static SortMode sortModeFromString(const QString &value);
+
+    static QString priorityBadgeColor(Task::Priority p);
+    static QString priorityLabel(Task::Priority p);
+
     QLineEdit *taskInput;
     QPushButton *addButton;
     QListWidget *taskList;
@@ -48,8 +62,9 @@ private:
     QLabel *imageLabel;
     QVector<Task> tasks;
     QString cacheFilePath;
-    QString pathsDir;
+    QString settingsFilePath;
     bool updatingList = false;
+    SortMode sortMode = SortMode::None;
 };
 
 #endif // TODOLISTAPP_H
