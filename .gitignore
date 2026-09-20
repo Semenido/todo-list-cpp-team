@@ -118,7 +118,7 @@ todo-list
 
 # cache
 cached_tasks.json
-*.txt
+
 
 ### VisualStudioCode ###
 .vscode/*
