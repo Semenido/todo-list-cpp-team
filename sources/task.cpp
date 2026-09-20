@@ -9,6 +9,18 @@ QString Task::getDescription() const {
     return description;
 }
 
+void Task::setDescription(const QString &value) {
+    description = value;
+}
+
+QString Task::getComment() const {
+    return comment;
+}
+
+void Task::setComment(const QString &value) {
+    comment = value;
+}
+
 bool Task::isCompleted() const {
     return completed;
 }

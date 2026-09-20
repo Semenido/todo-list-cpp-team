@@ -1,4 +1,6 @@
-#include "../headers/todolistapp.h"
+#include "../headers/edittaskdialog.h"
+#include <QMenu>
+#include <QPoint>
 #include <QVBoxLayout>
 #include <QFile>
 #include <QTextStream>
@@ -48,7 +50,10 @@ ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
     connect(saveButton, &QPushButton::clicked, this, &ToDoListApp::saveTasks);
     connect(loadButton, &QPushButton::clicked, this, &ToDoListApp::loadTasks);
     connect(addImageButton, &QPushButton::clicked, this, &ToDoListApp::addImageToTask);
-
+            taskList->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(taskList, &QListWidget::customContextMenuRequested,
+            this, &ToDoListApp::onContextMenuRequested);
+    
     QString docsDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
     if (docsDir.isEmpty())
         docsDir = QDir::homePath();
@@ -123,6 +128,11 @@ void ToDoListApp::updateTaskList() {
     for (const Task &task : tasks) {
         auto *item = new QListWidgetItem(task.getDescription());
         item->setData(Qt::UserRole, task.getId());
+
+        if (!task.getComment().isEmpty()) {
+            item->setToolTip(task.getComment());
+        }
+
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(task.isCompleted() ? Qt::Checked : Qt::Unchecked);
         taskList->addItem(item);
@@ -171,6 +181,56 @@ void ToDoListApp::addImageToTask() {
 
     t->setImagePath(imagePath);
     updateImagePreview(*t);
+    cacheTasksToFile();
+}
+
+// context menu
+
+void ToDoListApp::onContextMenuRequested(const QPoint &pos) {
+    QListWidgetItem *item = taskList->itemAt(pos);
+    if (!item)
+        return;
+
+    taskList->setCurrentItem(item);
+
+    QMenu menu(this);
+    QAction *editAction = menu.addAction("Редактировать");
+    QAction *chosen = menu.exec(taskList->viewport()->mapToGlobal(pos));
+
+    if (chosen == editAction)
+        editTask();
+}
+
+void ToDoListApp::editTask() {
+    QListWidgetItem *item = taskList->currentItem();
+    if (!item) {
+        QMessageBox::information(this, "Edit Task",
+                                 "Сначала выберите задачу в списке.");
+        return;
+    }
+
+    const int id = item->data(Qt::UserRole).toInt();
+    Task *t = findTaskById(id);
+    if (!t)
+        return;
+
+    EditTaskDialog dialog(this);
+    dialog.setDescription(t->getDescription());
+    dialog.setComment(t->getComment());
+
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const QString newDescription = dialog.description();
+    const QString newComment = dialog.comment();
+
+    if (newDescription == t->getDescription() && newComment == t->getComment())
+        return;
+
+    t->setDescription(newDescription);
+    t->setComment(newComment);
+
+    updateTaskList();
     cacheTasksToFile();
 }
 
@@ -428,6 +488,7 @@ void ToDoListApp::cacheTasksToFile() {
     for (const Task &task : tasks) {
         QJsonObject taskObject;
         taskObject["description"] = task.getDescription();
+        taskObject["comment"] = task.getComment();
         taskObject["completed"] = task.isCompleted();
         taskObject["imagePath"] = task.getImagePath();
         tasksArray.append(taskObject);
@@ -459,10 +520,92 @@ void ToDoListApp::cacheTasksFromCacheFile() {
         const QJsonObject taskObject = taskValue.toObject();
         Task task(taskObject["description"].toString(),
                   taskObject["completed"].toBool());
+        task.setComment(taskObject["comment"].toString());
         task.setImagePath(taskObject["imagePath"].toString());
         loaded.append(task);
     }
 
     tasks = loaded;
     updateTaskList();
+}
+
+bool ToDoListApp::writeTasksToFile(const QString &path, QString &error) const {
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        error = file.errorString();
+        return false;
+    }
+
+    auto escape = [](QString s) {
+        s.replace('\\', "\\\\");
+        s.replace('\t', "\\t");
+        s.replace('\n', "\\n");
+        return s;
+    };
+
+    QTextStream stream(&file);
+    for (const Task &task : tasks) {
+        stream << escape(task.getDescription()) << '\t'
+               << (task.isCompleted() ? '1' : '0') << '\t'
+               << escape(task.getImagePath()) << '\t'
+               << escape(task.getComment()) << '\n';
+    }
+
+    stream.flush();
+    if (file.error() != QFileDevice::NoError) {
+        error = file.errorString();
+        file.close();
+        return false;
+    }
+    file.close();
+    return true;
+}
+
+bool ToDoListApp::readTasksFromFile(const QString &path,
+                                    QVector<Task> &out,
+                                    QString &error) const {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        error = file.errorString();
+        return false;
+    }
+
+    auto unescape = [](QString s) {
+        s.replace("\\n", "\n");
+        s.replace("\\t", "\t");
+        s.replace("\\\\", "\\");
+        return s;
+    };
+
+    QVector<Task> loaded;
+    QTextStream stream(&file);
+    while (!stream.atEnd()) {
+        const QString line = stream.readLine();
+        if (line.isEmpty())
+            continue;
+
+        const QStringList parts = line.split('\t');
+        if (parts.size() < 3) {
+            error = "Ошибка: выбранный файл не является файлом сохранения "
+                    "todo-list-app, либо был поврежден или изменен.";
+            file.close();
+            return false;
+        }
+
+        Task task(unescape(parts[0]), parts[1] == "1");
+        task.setImagePath(unescape(parts[2]));
+        if (parts.size() >= 4)
+            task.setComment(unescape(parts[3]));
+        loaded.append(task);
+    }
+
+    if (file.error() != QFileDevice::NoError) {
+        error = file.errorString();
+        file.close();
+        return false;
+    }
+
+    file.close();
+    out = loaded;
+    return true;
 }

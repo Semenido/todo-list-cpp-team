@@ -18,6 +18,8 @@ private slots:
     void toggleTaskComplete(QListWidgetItem *item);
     void onItemChanged(QListWidgetItem *item);
     void onSelectionChanged();
+    void onContextMenuRequested(const QPoint &pos);
+    void editTask();
     void saveTasks();
     void loadTasks();
     void addImageToTask();
