@@ -3,6 +3,7 @@
 
 #include <QString>
 #include <QPixmap>
+#include <QDateTime>
 
 class Task {
 public:
@@ -26,7 +27,11 @@ public:
     void setPriority(Priority value);
 
     bool isCompleted() const;
+    void setCompleted(bool value);
     void toggleComplete();
+
+    QDateTime getCompletedAt() const;
+    void setCompletedAt(const QDateTime &value);
 
     void setImagePath(const QString &path);
     QString getImagePath() const;
@@ -42,6 +47,7 @@ private:
     QString comment;
     Priority priority = Priority::Medium;
     bool completed;
+    QDateTime completedAt;
     QString imagePath;
 };
 

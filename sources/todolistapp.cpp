@@ -16,6 +16,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFont>
+#include <QDateTime>
 #include <algorithm>
 
 static const char *kSettingsFileName = "settings.json";
@@ -78,6 +79,18 @@ ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
     cacheTasksFromCacheFile();
 }
 
+void ToDoListApp::setTaskCompleted(Task &task, bool value) {
+    if (task.isCompleted() == value)
+        return;
+
+    task.setCompleted(value);
+    if (value) {
+        task.setCompletedAt(QDateTime::currentDateTime());
+    } else {
+        task.setCompletedAt(QDateTime());
+    }
+}
+
 void ToDoListApp::addTask() {
     const QString taskDescription = taskInput->text().trimmed();
     if (taskDescription.isEmpty())
@@ -100,7 +113,7 @@ void ToDoListApp::toggleTaskComplete(QListWidgetItem *item) {
     if (!item) return;
     const int id = item->data(Qt::UserRole).toInt();
     if (Task *t = findTaskById(id)) {
-        t->toggleComplete();
+        setTaskCompleted(*t, !t->isCompleted());
         updateTaskList();
         cacheTasksToFile();
     }
@@ -116,7 +129,7 @@ void ToDoListApp::onItemChanged(QListWidgetItem *item) {
 
     const bool checked = (item->checkState() == Qt::Checked);
     if (t->isCompleted() != checked) {
-        t->toggleComplete();
+        setTaskCompleted(*t, checked);
         cacheTasksToFile();
     }
 }
@@ -180,8 +193,16 @@ void ToDoListApp::updateTaskList() {
         auto *item = new QListWidgetItem(task.getDescription());
         item->setData(Qt::UserRole, task.getId());
 
-        if (!task.getComment().isEmpty())
-            item->setToolTip(task.getComment());
+        QString tooltip = task.getComment();
+        if (task.isCompleted() && task.getCompletedAt().isValid()) {
+            tooltip = tooltip.isEmpty()
+                          ? QString()
+                          : tooltip + "\n";
+            tooltip += "Completed: "
+                       + task.getCompletedAt().toString("dd.MM.yyyy HH:mm");
+        }
+        if (!tooltip.isEmpty())
+            item->setToolTip(tooltip);
 
         if (task.getPriority() == Task::Priority::High) {
             QFont f = item->font();
@@ -193,10 +214,15 @@ void ToDoListApp::updateTaskList() {
         item->setCheckState(task.isCompleted() ? Qt::Checked : Qt::Unchecked);
         taskList->addItem(item);
 
-        const QString badgeText =
+        QString badgeText =
             QString("<span style='color:%1; font-weight:bold;'>●</span> %2")
                 .arg(priorityBadgeColor(task.getPriority()),
                      priorityLabel(task.getPriority()));
+
+        if (task.isCompleted() && task.getCompletedAt().isValid()) {
+            badgeText += QString(" &nbsp; <span style='color:#616161;'>✓ %1</span>")
+                             .arg(task.getCompletedAt().toString("dd.MM.yyyy HH:mm"));
+        }
 
         auto *badge = new QLabel(badgeText);
         badge->setTextFormat(Qt::RichText);
@@ -256,10 +282,11 @@ void ToDoListApp::onContextMenuRequested(const QPoint &pos) {
     QListWidgetItem *item = taskList->itemAt(pos);
 
     QMenu menu(this);
+    QAction *editAction = nullptr;
 
     if (item) {
         taskList->setCurrentItem(item);
-        menu.addAction("Редактировать");
+        editAction = menu.addAction("Редактировать");
         menu.addSeparator();
     }
 
@@ -277,61 +304,24 @@ void ToDoListApp::onContextMenuRequested(const QPoint &pos) {
     if (!chosen)
         return;
 
-    if (chosen == byPriorityAction) {
+    if (chosen == editAction) {
+        editTask();
+    } else if (chosen == byPriorityAction) {
         sortMode = (sortMode == SortMode::ByPriority)
                        ? SortMode::None
                        : SortMode::ByPriority;
+        saveSettings();
+        updateTaskList();
     } else if (chosen == byNameAction) {
         sortMode = (sortMode == SortMode::ByName)
                        ? SortMode::None
                        : SortMode::ByName;
-    } else {
-        return;
+        saveSettings();
+        updateTaskList();
     }
-
-    saveSettings();
-    updateTaskList();
 }
 
-void ToDoListApp::editTask() {
-    QListWidgetItem *item = taskList->currentItem();
-    if (!item) {
-        QMessageBox::information(this, "Edit Task",
-                                 "Сначала выберите задачу в списке.");
-        return;
-    }
-
-    const int id = item->data(Qt::UserRole).toInt();
-    Task *t = findTaskById(id);
-    if (!t)
-        return;
-
-    EditTaskDialog dialog(this);
-    dialog.setDescription(t->getDescription());
-    dialog.setComment(t->getComment());
-    dialog.setPriority(t->getPriority());
-
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-
-    const QString newDescription = dialog.description();
-    const QString newComment = dialog.comment();
-    const Task::Priority newPriority = dialog.priority();
-
-    if (newDescription == t->getDescription()
-        && newComment == t->getComment()
-        && newPriority == t->getPriority())
-        return;
-
-    t->setDescription(newDescription);
-    t->setComment(newComment);
-    t->setPriority(newPriority);
-
-    updateTaskList();
-    cacheTasksToFile();
-}
-
-// ---------------- settings ----------------
+// settings
 
 void ToDoListApp::loadSettings() {
     QFile f(settingsFilePath);
@@ -347,7 +337,6 @@ void ToDoListApp::loadSettings() {
         return;
 
     const QJsonObject obj = doc.object();
-
     sortMode = sortModeFromString(obj.value(kSortModeKey).toString());
 }
 
@@ -359,9 +348,24 @@ void ToDoListApp::saveSettings() const {
     QJsonObject obj;
     obj[kSortModeKey] = sortModeToString(sortMode);
 
-    const QJsonDocument doc(obj);
+    // сохранить ранее записанные пути, если они есть
+    QFile rf(settingsFilePath);
+    if (rf.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        const QByteArray data = rf.readAll();
+        rf.close();
+        QJsonParseError err{};
+        const QJsonDocument doc = QJsonDocument::fromJson(data, &err);
+        if (err.error == QJsonParseError::NoError && doc.isObject()) {
+            const QJsonObject old = doc.object();
+            if (old.contains(kLastSaveFileKey))
+                obj[kLastSaveFileKey] = old[kLastSaveFileKey];
+            if (old.contains(kLastLoadFileKey))
+                obj[kLastLoadFileKey] = old[kLastLoadFileKey];
+        }
+    }
+
     QTextStream stream(&f);
-    stream << doc.toJson(QJsonDocument::Indented);
+    stream << QJsonDocument(obj).toJson(QJsonDocument::Indented);
     f.close();
 }
 
@@ -381,11 +385,11 @@ ToDoListApp::SortMode ToDoListApp::sortModeFromString(const QString &value) {
     return SortMode::None;
 }
 
-// ---------------- last path (в settings.json) ----------------
+// last path
 
 QString ToDoListApp::readLastPath(const QString &filePath,
                                   const QString &fallback) const {
-    QFile f(filePath);
+    QFile f(settingsFilePath);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
         return fallback;
 
@@ -415,9 +419,9 @@ QString ToDoListApp::readLastPath(const QString &filePath,
 
 void ToDoListApp::writeLastPath(const QString &filePath,
                                 const QString &value) const {
-    QFile f(settingsFilePath);
     QJsonObject obj;
 
+    QFile f(settingsFilePath);
     if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
         const QByteArray data = f.readAll();
         f.close();
@@ -439,7 +443,7 @@ void ToDoListApp::writeLastPath(const QString &filePath,
     f.close();
 }
 
-// ---------------- Save / Load ----------------
+// Save / Load
 
 bool ToDoListApp::isPathSafeForWrite(const QString &path, QString &reason) const {
     if (path.isEmpty()) {
@@ -495,11 +499,16 @@ bool ToDoListApp::writeTasksToFile(const QString &path, QString &error) const {
 
     QTextStream stream(&file);
     for (const Task &task : tasks) {
+        const QString completedAtStr = task.getCompletedAt().isValid()
+            ? task.getCompletedAt().toString(Qt::ISODate)
+            : QString();
+
         stream << escape(task.getDescription()) << '\t'
                << (task.isCompleted() ? '1' : '0') << '\t'
                << escape(task.getImagePath()) << '\t'
                << escape(task.getComment()) << '\t'
-               << Task::priorityToString(task.getPriority()) << '\n';
+               << Task::priorityToString(task.getPriority()) << '\t'
+               << completedAtStr << '\n';
     }
 
     stream.flush();
@@ -549,6 +558,11 @@ bool ToDoListApp::readTasksFromFile(const QString &path,
             task.setComment(unescape(parts[3]));
         if (parts.size() >= 5)
             task.setPriority(Task::priorityFromString(unescape(parts[4])));
+        if (parts.size() >= 6 && !parts[5].isEmpty()) {
+            const QDateTime dt = QDateTime::fromString(parts[5], Qt::ISODate);
+            if (dt.isValid())
+                task.setCompletedAt(dt);
+        }
         loaded.append(task);
     }
 
@@ -644,7 +658,7 @@ void ToDoListApp::loadTasks() {
                                  .arg(tasks.size()).arg(selected));
 }
 
-// ---------------- Cache ----------------
+// Cache
 
 void ToDoListApp::cacheTasksToFile() {
     QFile cacheFile(cacheFilePath);
@@ -658,6 +672,9 @@ void ToDoListApp::cacheTasksToFile() {
         taskObject["comment"] = task.getComment();
         taskObject["priority"] = Task::priorityToString(task.getPriority());
         taskObject["completed"] = task.isCompleted();
+        if (task.getCompletedAt().isValid())
+            taskObject["completedAt"] =
+                task.getCompletedAt().toString(Qt::ISODate);
         taskObject["imagePath"] = task.getImagePath();
         tasksArray.append(taskObject);
     }
@@ -692,9 +709,65 @@ void ToDoListApp::cacheTasksFromCacheFile() {
         task.setPriority(Task::priorityFromString(
             taskObject["priority"].toString()));
         task.setImagePath(taskObject["imagePath"].toString());
+
+        const QString dtStr = taskObject["completedAt"].toString();
+        if (!dtStr.isEmpty()) {
+            const QDateTime dt = QDateTime::fromString(dtStr, Qt::ISODate);
+            if (dt.isValid())
+                task.setCompletedAt(dt);
+        }
+
         loaded.append(task);
     }
 
     tasks = loaded;
     updateTaskList();
+}
+
+void ToDoListApp::editTask() {
+    QListWidgetItem *item = taskList->currentItem();
+    if (!item) {
+        QMessageBox::information(this, "Edit Task",
+                                 "Сначала выберите задачу в списке.");
+        return;
+    }
+
+    const int id = item->data(Qt::UserRole).toInt();
+    Task *t = findTaskById(id);
+    if (!t)
+        return;
+
+    EditTaskDialog dialog(this);
+    dialog.setDescription(t->getDescription());
+    dialog.setComment(t->getComment());
+    dialog.setPriority(t->getPriority());
+    dialog.setTaskCompleted(t->isCompleted());
+    dialog.setCompletedAt(t->getCompletedAt());
+
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const QString newDescription = dialog.description();
+    const QString newComment = dialog.comment();
+    const Task::Priority newPriority = dialog.priority();
+    const bool newCompleted = dialog.taskCompleted();
+    const QDateTime newCompletedAt = dialog.completedAt();
+
+    const bool noChanges =
+        newDescription == t->getDescription()
+        && newComment == t->getComment()
+        && newPriority == t->getPriority()
+        && newCompleted == t->isCompleted()
+        && newCompletedAt == t->getCompletedAt();
+    if (noChanges)
+        return;
+
+    t->setDescription(newDescription);
+    t->setComment(newComment);
+    t->setPriority(newPriority);
+    t->setCompleted(newCompleted);
+    t->setCompletedAt(newCompleted ? newCompletedAt : QDateTime());
+
+    updateTaskList();
+    cacheTasksToFile();
 }

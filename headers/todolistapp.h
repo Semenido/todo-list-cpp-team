@@ -53,6 +53,8 @@ private:
     static QString priorityBadgeColor(Task::Priority p);
     static QString priorityLabel(Task::Priority p);
 
+    void setTaskCompleted(Task &task, bool value);
+
     QLineEdit *taskInput;
     QPushButton *addButton;
     QListWidget *taskList;
