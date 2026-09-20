@@ -29,6 +29,13 @@ private:
     void cacheTasksFromCacheFile();
     Task* findTaskById(int id);
 
+    bool isPathSafeForWrite(const QString &path, QString &reason) const;
+    bool writeTasksToFile(const QString &path, QString &error) const;
+    bool readTasksFromFile(const QString &path, QVector<Task> &out, QString &error) const;
+
+    QString readLastPath(const QString &filePath, const QString &fallback) const;
+    void writeLastPath(const QString &filePath, const QString &value) const;
+
     QLineEdit *taskInput;
     QPushButton *addButton;
     QListWidget *taskList;
@@ -38,6 +45,7 @@ private:
     QLabel *imageLabel;
     QVector<Task> tasks;
     QString cacheFilePath;
+    QString pathsDir;
     bool updatingList = false;
 };
 
