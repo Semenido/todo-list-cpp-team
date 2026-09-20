@@ -325,7 +325,8 @@ bool ToDoListApp::writeTasksToFile(const QString &path, QString &error) const {
         stream << escape(task.getDescription()) << '\t'
                << (task.isCompleted() ? '1' : '0') << '\t'
                << escape(task.getImagePath()) << '\t'
-               << escape(task.getComment()) << '\n';
+               << escape(task.getComment()) << '\t'
+               << Task::priorityToString(task.getPriority()) << '\n';
     }
 
     stream.flush();
@@ -373,6 +374,8 @@ bool ToDoListApp::readTasksFromFile(const QString &path,
         task.setImagePath(unescape(parts[2]));
         if (parts.size() >= 4)
             task.setComment(unescape(parts[3]));
+        if (parts.size() >= 5)
+            task.setPriority(Task::priorityFromString(unescape(parts[4])));
         loaded.append(task);
     }
 
@@ -480,6 +483,7 @@ void ToDoListApp::cacheTasksToFile() {
         QJsonObject taskObject;
         taskObject["description"] = task.getDescription();
         taskObject["comment"] = task.getComment();
+        taskObject["priority"] = Task::priorityToString(task.getPriority());
         taskObject["completed"] = task.isCompleted();
         taskObject["imagePath"] = task.getImagePath();
         tasksArray.append(taskObject);
@@ -512,6 +516,8 @@ void ToDoListApp::cacheTasksFromCacheFile() {
         Task task(taskObject["description"].toString(),
                   taskObject["completed"].toBool());
         task.setComment(taskObject["comment"].toString());
+        task.setPriority(Task::priorityFromString(
+            taskObject["priority"].toString()));
         task.setImagePath(taskObject["imagePath"].toString());
         loaded.append(task);
     }

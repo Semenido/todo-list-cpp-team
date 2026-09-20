@@ -21,6 +21,14 @@ void Task::setComment(const QString &value) {
     comment = value;
 }
 
+Task::Priority Task::getPriority() const {
+    return priority;
+}
+
+void Task::setPriority(Priority value) {
+    priority = value;
+}
+
 bool Task::isCompleted() const {
     return completed;
 }
@@ -39,4 +47,20 @@ QString Task::getImagePath() const {
 
 QPixmap Task::getImage() const {
     return QPixmap(imagePath);
+}
+
+QString Task::priorityToString(Priority value) {
+    switch (value) {
+    case Priority::Low:    return "low";
+    case Priority::High:   return "high";
+    case Priority::Medium:
+    default:               return "medium";
+    }
+}
+
+Task::Priority Task::priorityFromString(const QString &value) {
+    const QString v = value.trimmed().toLower();
+    if (v == "low")    return Priority::Low;
+    if (v == "high")   return Priority::High;
+    return Priority::Medium;
 }
