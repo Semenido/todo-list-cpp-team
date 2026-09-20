@@ -2,6 +2,7 @@
 #include "../headers/edittaskdialog.h"
 #include <QVBoxLayout>
 #include <QMenu>
+#include <QAction>
 #include <QPoint>
 #include <QFile>
 #include <QTextStream>
@@ -14,9 +15,13 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QFileInfo>
-#include <QColor>
 #include <QFont>
 #include <algorithm>
+
+static const char *kSettingsFileName = "settings.json";
+static const char *kLastSaveFileKey  = "last_save_path";
+static const char *kLastLoadFileKey  = "last_load_path";
+static const char *kSortModeKey      = "sort_mode";
 
 ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
     setWindowTitle("To-Do List App");
@@ -64,11 +69,12 @@ ToDoListApp::ToDoListApp(QWidget *parent) : QMainWindow(parent) {
         docsDir = QDir::homePath();
 
     const QString baseDir = docsDir + "/.todo-list";
-    pathsDir = baseDir + "/paths";
+    QDir().mkpath(baseDir);
 
-    QDir().mkpath(pathsDir);
-    cacheFilePath = baseDir + "/cached_tasks.json";
+    cacheFilePath    = baseDir + "/cached_tasks.json";
+    settingsFilePath = baseDir + "/" + kSettingsFileName;
 
+    loadSettings();
     cacheTasksFromCacheFile();
 }
 
@@ -127,17 +133,47 @@ void ToDoListApp::onSelectionChanged() {
         updateImagePreview(*t);
 }
 
+QString ToDoListApp::priorityBadgeColor(Task::Priority p) {
+    switch (p) {
+    case Task::Priority::Low:    return "#9e9e9e";
+    case Task::Priority::High:   return "#e53935";
+    case Task::Priority::Medium:
+    default:                     return "#fb8c00";
+    }
+}
+
+QString ToDoListApp::priorityLabel(Task::Priority p) {
+    switch (p) {
+    case Task::Priority::Low:    return "Low";
+    case Task::Priority::High:   return "High";
+    case Task::Priority::Medium:
+    default:                     return "Medium";
+    }
+}
+
 void ToDoListApp::updateTaskList() {
     updatingList = true;
     taskList->clear();
 
     QVector<Task> ordered = tasks;
-    if (sortByPriority) {
+    switch (sortMode) {
+    case SortMode::ByPriority:
         std::stable_sort(ordered.begin(), ordered.end(),
                          [](const Task &a, const Task &b) {
                              return static_cast<int>(a.getPriority())
                                   > static_cast<int>(b.getPriority());
                          });
+        break;
+    case SortMode::ByName:
+        std::stable_sort(ordered.begin(), ordered.end(),
+                         [](const Task &a, const Task &b) {
+                             return a.getDescription().localeAwareCompare(
+                                        b.getDescription()) < 0;
+                         });
+        break;
+    case SortMode::None:
+    default:
+        break;
     }
 
     for (const Task &task : ordered) {
@@ -147,26 +183,28 @@ void ToDoListApp::updateTaskList() {
         if (!task.getComment().isEmpty())
             item->setToolTip(task.getComment());
 
-        switch (task.getPriority()) {
-        case Task::Priority::Low:
-            item->setBackground(QColor(235, 235, 235));
-            break;
-        case Task::Priority::High: {
-            item->setBackground(QColor(255, 220, 220));
+        if (task.getPriority() == Task::Priority::High) {
             QFont f = item->font();
             f.setBold(true);
             item->setFont(f);
-            break;
-        }
-        case Task::Priority::Medium:
-        default:
-            break;
         }
 
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(task.isCompleted() ? Qt::Checked : Qt::Unchecked);
         taskList->addItem(item);
+
+        const QString badgeText =
+            QString("<span style='color:%1; font-weight:bold;'>●</span> %2")
+                .arg(priorityBadgeColor(task.getPriority()),
+                     priorityLabel(task.getPriority()));
+
+        auto *badge = new QLabel(badgeText);
+        badge->setTextFormat(Qt::RichText);
+        badge->setAlignment(Qt::AlignVCenter | Qt::AlignRight);
+        badge->setContentsMargins(0, 0, 6, 0);
+        taskList->setItemWidget(item, badge);
     }
+
     updatingList = false;
 
     if (taskList->currentItem())
@@ -218,35 +256,41 @@ void ToDoListApp::onContextMenuRequested(const QPoint &pos) {
     QListWidgetItem *item = taskList->itemAt(pos);
 
     QMenu menu(this);
-    QAction *editAction = nullptr;
 
     if (item) {
         taskList->setCurrentItem(item);
-        editAction = menu.addAction("Редактировать");
+        menu.addAction("Редактировать");
         menu.addSeparator();
     }
 
-    QAction *sortByPriorityAction = menu.addAction("Сортировать по приоритету");
-    sortByPriorityAction->setCheckable(true);
-    sortByPriorityAction->setChecked(sortByPriority);
+    QMenu *sortMenu = menu.addMenu("Сортировка");
 
-    QAction *noSortAction = menu.addAction("Без сортировки");
-    noSortAction->setCheckable(true);
-    noSortAction->setChecked(!sortByPriority);
+    QAction *byPriorityAction = sortMenu->addAction("Сортировать по приоритету");
+    byPriorityAction->setCheckable(true);
+    byPriorityAction->setChecked(sortMode == SortMode::ByPriority);
+
+    QAction *byNameAction = sortMenu->addAction("Сортировать по имени");
+    byNameAction->setCheckable(true);
+    byNameAction->setChecked(sortMode == SortMode::ByName);
 
     QAction *chosen = menu.exec(taskList->viewport()->mapToGlobal(pos));
     if (!chosen)
         return;
 
-    if (chosen == editAction) {
-        editTask();
-    } else if (chosen == sortByPriorityAction) {
-        sortByPriority = true;
-        updateTaskList();
-    } else if (chosen == noSortAction) {
-        sortByPriority = false;
-        updateTaskList();
+    if (chosen == byPriorityAction) {
+        sortMode = (sortMode == SortMode::ByPriority)
+                       ? SortMode::None
+                       : SortMode::ByPriority;
+    } else if (chosen == byNameAction) {
+        sortMode = (sortMode == SortMode::ByName)
+                       ? SortMode::None
+                       : SortMode::ByName;
+    } else {
+        return;
     }
+
+    saveSettings();
+    updateTaskList();
 }
 
 void ToDoListApp::editTask() {
@@ -287,16 +331,74 @@ void ToDoListApp::editTask() {
     cacheTasksToFile();
 }
 
+// ---------------- settings ----------------
+
+void ToDoListApp::loadSettings() {
+    QFile f(settingsFilePath);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+
+    const QByteArray data = f.readAll();
+    f.close();
+
+    QJsonParseError err{};
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject())
+        return;
+
+    const QJsonObject obj = doc.object();
+
+    sortMode = sortModeFromString(obj.value(kSortModeKey).toString());
+}
+
+void ToDoListApp::saveSettings() const {
+    QFile f(settingsFilePath);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return;
+
+    QJsonObject obj;
+    obj[kSortModeKey] = sortModeToString(sortMode);
+
+    const QJsonDocument doc(obj);
+    QTextStream stream(&f);
+    stream << doc.toJson(QJsonDocument::Indented);
+    f.close();
+}
+
+QString ToDoListApp::sortModeToString(SortMode mode) {
+    switch (mode) {
+    case SortMode::ByPriority: return "priority";
+    case SortMode::ByName:     return "name";
+    case SortMode::None:
+    default:                   return "none";
+    }
+}
+
+ToDoListApp::SortMode ToDoListApp::sortModeFromString(const QString &value) {
+    const QString v = value.trimmed().toLower();
+    if (v == "priority") return SortMode::ByPriority;
+    if (v == "name")     return SortMode::ByName;
+    return SortMode::None;
+}
+
+// ---------------- last path (в settings.json) ----------------
+
 QString ToDoListApp::readLastPath(const QString &filePath,
                                   const QString &fallback) const {
     QFile f(filePath);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
         return fallback;
 
-    QTextStream stream(&f);
-    const QString line = stream.readLine().trimmed();
+    const QByteArray data = f.readAll();
     f.close();
 
+    QJsonParseError err{};
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject())
+        return fallback;
+
+    const QString key = (filePath == "save") ? kLastSaveFileKey : kLastLoadFileKey;
+    const QString line = doc.object().value(key).toString().trimmed();
     if (line.isEmpty())
         return fallback;
 
@@ -313,14 +415,31 @@ QString ToDoListApp::readLastPath(const QString &filePath,
 
 void ToDoListApp::writeLastPath(const QString &filePath,
                                 const QString &value) const {
-    QFile f(filePath);
+    QFile f(settingsFilePath);
+    QJsonObject obj;
+
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        const QByteArray data = f.readAll();
+        f.close();
+        QJsonParseError err{};
+        const QJsonDocument doc = QJsonDocument::fromJson(data, &err);
+        if (err.error == QJsonParseError::NoError && doc.isObject())
+            obj = doc.object();
+    }
+
+    const QString key = (filePath == "save") ? kLastSaveFileKey : kLastLoadFileKey;
+    obj[key] = value;
+    obj[kSortModeKey] = sortModeToString(sortMode);
+
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
         return;
 
     QTextStream stream(&f);
-    stream << value << '\n';
+    stream << QJsonDocument(obj).toJson(QJsonDocument::Indented);
     f.close();
 }
+
+// ---------------- Save / Load ----------------
 
 bool ToDoListApp::isPathSafeForWrite(const QString &path, QString &reason) const {
     if (path.isEmpty()) {
@@ -445,8 +564,7 @@ bool ToDoListApp::readTasksFromFile(const QString &path,
 }
 
 void ToDoListApp::saveTasks() {
-    const QString lastSaveFile = pathsDir + "/last_save_path.txt";
-    const QString startPath = readLastPath(lastSaveFile, QDir::homePath());
+    const QString startPath = readLastPath("save", QDir::homePath());
 
     QString selected = QFileDialog::getSaveFileName(
         this,
@@ -482,14 +600,13 @@ void ToDoListApp::saveTasks() {
         return;
     }
 
-    writeLastPath(lastSaveFile, selected);
+    writeLastPath("save", selected);
     QMessageBox::information(this, "Save Tasks",
                              QString("Сохранено в:\n%1").arg(selected));
 }
 
 void ToDoListApp::loadTasks() {
-    const QString lastLoadFile = pathsDir + "/last_load_path.txt";
-    const QString startPath = readLastPath(lastLoadFile, QDir::homePath());
+    const QString startPath = readLastPath("load", QDir::homePath());
 
     const QString selected = QFileDialog::getOpenFileName(
         this,
@@ -521,11 +638,13 @@ void ToDoListApp::loadTasks() {
     updateTaskList();
     cacheTasksToFile();
 
-    writeLastPath(lastLoadFile, selected);
+    writeLastPath("load", selected);
     QMessageBox::information(this, "Load Tasks",
                              QString("Загружено %1 задач из:\n%2")
                                  .arg(tasks.size()).arg(selected));
 }
+
+// ---------------- Cache ----------------
 
 void ToDoListApp::cacheTasksToFile() {
     QFile cacheFile(cacheFilePath);
