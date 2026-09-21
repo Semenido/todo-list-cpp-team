@@ -55,7 +55,7 @@ make run
 
 ## Авторы
 
-ККСО-06-22, студенты Кан А.Е, Семменидо В.А, Каипов М.А
+ККСО-06-22, студенты Кан А.Е, Семменидо В.А, Каипов М.А \
 This project was created by [Sami Hindi](https://samihindi.com).
 
 ## License
