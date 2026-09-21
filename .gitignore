@@ -116,6 +116,10 @@ compile_commands.json
 # binaries
 todo-list
 
+# cache
+cached_tasks.json
+
+
 ### VisualStudioCode ###
 .vscode/*
 !.vscode/settings.json
@@ -136,3 +140,5 @@ todo-list
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/c++,visualstudiocode,qtcreator,qt
+# Build directory
+build/

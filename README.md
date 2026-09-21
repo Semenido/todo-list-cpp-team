@@ -16,6 +16,10 @@ This is a simple To-Do List application built using Qt framework and C++. The ap
 - Qt framework
 - C++ compiler
 
+```bash
+sudo apt update
+sudo apt install build-essential qtbase5-dev qt5-qmake qtbase5-dev-tools cmake
+```
 ## Installation
 
 1. Clone the repository: `git clone https://github.com/fujiwarachoki/todo-list-cpp.git`
