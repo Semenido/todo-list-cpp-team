@@ -1,44 +1,62 @@
-# To-Do List App in C++
+# To-Do List App на C++
 
-This is a simple To-Do List application built using Qt framework and C++. The application allows you to create tasks, mark them as completed, and attach images to tasks. It also provides the functionality to save and load tasks to/from a file and cache tasks using JSON format.
+Простое приложение для ведения списка задач на Qt и C++. Позволяет
+создавать задачи, редактировать их, назначать приоритет и дату
+выполнения, прикреплять изображения, искать и сортировать, а также
+сохранять/загружать список в файл и кэшировать текущее состояние в JSON.
 
-## Features
+## Возможности
 
-- Add tasks to the list
-- Mark tasks as completed
-- Attach images to tasks
-- Save tasks to a file
-- Load tasks from a file
-- Cache tasks using JSON format
+- Добавление задач с названием, комментарием и приоритетом
+- Отметка задачи как выполненной
+- Автоматическая простановка даты и времени выполнения при отметке
+  задачи выполненной
+- Редактирование задачи через контекстное меню (ПКМ → «Редактировать»)
+- Прикрепление изображения к выбранной задаче
+- Поиск по задачам в реальном времени
+- Сортировка задач
+- Визуальная индикация приоритета
+- Сохранение задач в пользовательский `.txt` файл
+- Кэш и настройки хранятся в домашней директории пользователя
 
-## Requirements
+## Требования
 
-- Qt framework
-- C++ compiler
+- Qt5
+- Компилятор C++ с поддержкой C++17
+- qmake и/или CMake
+- Linux (проверено на Astra Linux 1.7.6)
+
+Установка зависимостей (Debian / Ubuntu / Astra Linux):
 
 ```bash
 sudo apt update
 sudo apt install build-essential qtbase5-dev qt5-qmake qtbase5-dev-tools cmake
 ```
-## Installation
 
-1. Clone the repository: `git clone https://github.com/fujiwarachoki/todo-list-cpp.git`
-2. Open the project in Qt Creator or your preferred IDE.
-3. Build and run the application.
+## Сборка и запуск
 
-## Usage
+```bash
+git clone https://github.com/fujiwarachoki/todo-list-cpp.git
+cd todo-list-cpp
+make
+# Запуск программы
+make run
+# Или
+./todo-list
+```
 
-1. Run the application.
-2. Type a task description in the input field and click "Add Task" to add it to the list.
-3. Double-click on a task to mark it as completed.
-4. Click "Add Image" to attach an image to a task.
-5. Use the "Save Tasks" and "Load Tasks" buttons to save and load tasks to/from a file.
-6. Cached tasks are automatically loaded from the cache file on startup.
+## Где хранятся кэш?
 
-## Author
+```bash
+~/Документы/.todo-list/
+├── cached_tasks.json   — текущее состояние задач
+└── settings.json       — настройки приложения
+```
 
+## Авторы
+
+ККСО-06-22, студенты Кан А.Е, Семменидо В.А, Каипов М.А
 This project was created by [Sami Hindi](https://samihindi.com).
-
 
 ## License
 
